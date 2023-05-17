@@ -24,7 +24,7 @@ int poll(...) { return 0; }
 struct channel_filter {
     dsp::biquad_d2 lp[2];
     dsp::biquad_d2 hp[2];
-    float amount = 2.5f;  /* 4dB */
+    float amount = 2.0f;  /* 3dB */
 
     channel_filter(float sample_rate, float freq, float floor) {
         lp[0].set_lp_rbj(freq, 0.707, (float)sample_rate);
@@ -83,11 +83,16 @@ static block_t *Process(filter_t *p_this, block_t *block)
 static int Open(vlc_object_t *p_this)
 {
     auto *filter = reinterpret_cast<filter_t *>(p_this);
-    auto *state = new filter_sys_t;
     filter->fmt_in.audio.i_format = VLC_CODEC_FL32;
     filter->fmt_out.audio = filter->fmt_in.audio;
 
-    state->set_format(&filter->fmt_in.audio, 80, 20);
+    float freq(var_CreateGetIntegerCommand(p_this, "freq")),
+        floor(var_CreateGetIntegerCommand(p_this, "floor"));
+    if (floor > freq)
+        floor = freq;
+
+    auto *state = new filter_sys_t;
+    state->set_format(&filter->fmt_in.audio, freq, floor);
     filter->p_sys = state;
     filter->pf_audio_filter = Process;
     return VLC_SUCCESS;
@@ -109,4 +114,6 @@ vlc_module_begin()
     set_subcategory(SUBCAT_AUDIO_AFILTER)
     set_capability("audio filter", 0)
     set_callbacks(Open, Close)
+    add_integer("freq", 100, "Frequency", "Frequency (Hz)", FALSE)
+    add_integer("floor", 20, "Floor cutoff", "Floor cutoff (Hz)", FALSE)
 vlc_module_end()
