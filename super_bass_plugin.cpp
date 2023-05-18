@@ -22,30 +22,28 @@ int poll(...) { return 0; }
 #include "biquad.h"
 
 struct channel_filter {
-    dsp::biquad_d2 lp[2];
-    dsp::biquad_d2 hp[2];
-    float amount = 2.0f;  /* 3dB */
+    dsp::biquad_d2 lp[3], hp;
+    float amount = 2.0f;  /* 6dB */
 
-    channel_filter(float sample_rate, float freq, float floor) {
+    channel_filter(float sample_rate, float freq) {
         lp[0].set_lp_rbj(freq, 0.707, (float)sample_rate);
         lp[1].copy_coeffs(lp[0]);
-
-        hp[0].set_hp_rbj(floor, 0.707, (float)sample_rate);
-        hp[1].copy_coeffs(hp[0]);
+        lp[2].copy_coeffs(lp[0]);
+        hp.set_hp_rbj(20.0f, 0.707, (float)sample_rate);
     }
 
     void sanitize() {
         lp[0].sanitize();
         lp[1].sanitize();
-        hp[0].sanitize();
-        hp[1].sanitize();
+        lp[2].sanitize();
+        hp.sanitize();
     }
 
     float process(float input) {
         double proc = input;
-        proc = lp[1].process(lp[0].process(proc));
-        proc = hp[0].process(hp[1].process(proc));
-        return (float)proc * amount + input;
+        proc = lp[2].process(lp[1].process(lp[0].process(proc)));
+        proc = hp.process(proc) * amount;
+        return (float)proc + input;
     }
 };
 
@@ -53,10 +51,10 @@ struct filter_sys_t {
     std::vector<channel_filter> filters;
     float input_level = 0.5f;
 
-    void set_format(audio_format_t *fmt, float freq, float floor) {
+    void set_format(audio_format_t *fmt, float freq) {
         filters.clear();
         for (int i = 0; i < fmt->i_channels; i++)
-            filters.emplace_back((float)fmt->i_rate, freq, floor);
+            filters.emplace_back((float)fmt->i_rate, freq);
     }
 
     void sanitize_all() {
@@ -86,13 +84,9 @@ static int Open(vlc_object_t *p_this)
     filter->fmt_in.audio.i_format = VLC_CODEC_FL32;
     filter->fmt_out.audio = filter->fmt_in.audio;
 
-    float freq(var_CreateGetIntegerCommand(p_this, "freq")),
-        floor(var_CreateGetIntegerCommand(p_this, "floor"));
-    if (floor > freq)
-        floor = freq;
-
+    float freq(var_CreateGetIntegerCommand(p_this, "freq"));
     auto *state = new filter_sys_t;
-    state->set_format(&filter->fmt_in.audio, freq, floor);
+    state->set_format(&filter->fmt_in.audio, freq);
     filter->p_sys = state;
     filter->pf_audio_filter = Process;
     return VLC_SUCCESS;
@@ -115,5 +109,4 @@ vlc_module_begin()
     set_capability("audio filter", 0)
     set_callbacks(Open, Close)
     add_integer("freq", 100, "Frequency", "Frequency (Hz)", FALSE)
-    add_integer("floor", 20, "Floor cutoff", "Floor cutoff (Hz)", FALSE)
 vlc_module_end()
