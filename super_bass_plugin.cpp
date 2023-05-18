@@ -25,7 +25,7 @@ struct channel_filter {
     dsp::biquad_d2 lp[3], hp;
     float amount = 2.0f;  /* 6dB */
 
-    channel_filter(float sample_rate, float freq) {
+    channel_filter(int sample_rate, float freq) {
         lp[0].set_lp_rbj(freq, 0.707, (float)sample_rate);
         lp[1].copy_coeffs(lp[0]);
         lp[2].copy_coeffs(lp[0]);
@@ -54,7 +54,17 @@ struct filter_sys_t {
     void set_format(audio_format_t *fmt, float freq) {
         filters.clear();
         for (int i = 0; i < fmt->i_channels; i++)
-            filters.emplace_back((float)fmt->i_rate, freq);
+            filters.emplace_back(fmt->i_rate, freq);
+    }
+
+    void process_block(block_t *block) {
+        auto *ibp = reinterpret_cast<float *>(block->p_buffer);
+        for (int i = 0; i < block->i_nb_samples; i++) {
+            for (auto &chn_filter : filters) {
+                auto &item = *(ibp++);
+                item = chn_filter.process(item * input_level);
+            }
+        }
     }
 
     void sanitize_all() {
@@ -66,14 +76,7 @@ struct filter_sys_t {
 static block_t *Process(filter_t *p_this, block_t *block)
 {
     auto *filter = reinterpret_cast<filter_t *>(p_this);
-    auto *ibp = reinterpret_cast<float *>(block->p_buffer);
-    for (int i = 0; i < block->i_nb_samples; i++) {
-        for (auto & chn_filter : filter->p_sys->filters) {
-            auto &item = *(ibp++);
-            item = chn_filter.process(item * filter->p_sys->input_level);
-        }
-    }
-
+    filter->p_sys->process_block(block);
     filter->p_sys->sanitize_all();
     return block;
 }
