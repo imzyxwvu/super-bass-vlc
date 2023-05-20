@@ -22,19 +22,18 @@ int poll(...) { return 0; }
 #include "biquad.h"
 
 struct channel_filter {
-    dsp::biquad_d2 lp[3], hp;
+    dsp::biquad_d2 lp[2], hp;
     float amount = 2.0f;  /* 6dB */
 
     channel_filter(int sample_rate, float freq) {
         lp[0].set_lp_rbj(freq, 0.707, (float)sample_rate);
         lp[1].copy_coeffs(lp[0]);
-        lp[2].copy_coeffs(lp[0]);
         hp.set_hp_rbj(20.0f, 0.707, (float)sample_rate);
     }
 
     float process(float input) {
         double proc = input;
-        proc = lp[2].process(lp[1].process(lp[0].process(proc)));
+        proc = lp[1].process(lp[0].process(proc));
         proc = hp.process(proc) * amount;
         return (float)proc + input;
     }
