@@ -32,13 +32,6 @@ struct channel_filter {
         hp.set_hp_rbj(20.0f, 0.707, (float)sample_rate);
     }
 
-    void sanitize() {
-        lp[0].sanitize();
-        lp[1].sanitize();
-        lp[2].sanitize();
-        hp.sanitize();
-    }
-
     float process(float input) {
         double proc = input;
         proc = lp[2].process(lp[1].process(lp[0].process(proc)));
@@ -66,18 +59,12 @@ struct filter_sys_t {
             }
         }
     }
-
-    void sanitize_all() {
-        for (auto &chn_filter : filters)
-            chn_filter.sanitize();
-    }
 };
 
 static block_t *Process(filter_t *p_this, block_t *block)
 {
     auto *filter = reinterpret_cast<filter_t *>(p_this);
     filter->p_sys->process_block(block);
-    filter->p_sys->sanitize_all();
     return block;
 }
 
